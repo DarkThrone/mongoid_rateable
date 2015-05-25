@@ -26,8 +26,8 @@ module Mongoid
 
       index({"rating_marks.rater_id" => 1, "rating_marks.rater_class" => 1})
 
-      scope :unrated, where(:rating.exists => false)
-      scope :rated, where(:rating.exists => true)
+      scope :unrated, -> { where(:rating.exists => false) }
+      scope :rated, -> { where(:rating.exists => true) }
       scope :rated_by, ->(rater) { where("rating_marks.rater_id" => rater.id, "rating_marks.rater_class" => rater.class.to_s) }
       scope :with_rating, ->(range) { where(:rating.gte => range.begin, :rating.lte => range.end) }
       scope :highest_rated, ->(limit=10) { order_by([:rating, :desc]).limit(limit) }
@@ -193,8 +193,19 @@ module Mongoid
     end
 
     def user_mark(rater)
-      r = self.rating_marks.where(:rater_id => rater.id, :rater_class => rater.class.to_s).first
-      r ? r.mark : nil
+      case rater
+      when Array
+        if rater.map{|x| x.class}.uniq.count > 1
+            raise ArgumentError, "Raters all must be of same class."
+            return
+        end
+        r = self.rating_marks.in(:rater_id => rater.map(&:id), :rater_class => rater.first.class.to_s)
+        r ? r.inject(Hash.new(0)) { |h, e| h[e.rater_id] = e.mark ; h } : nil
+        
+      else       
+        r = self.rating_marks.where(:rater_id => rater.id, :rater_class => rater.class.to_s).first
+        r ? r.mark : nil
+      end
     end
 
     protected
